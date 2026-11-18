@@ -26,12 +26,33 @@ MAX_TOKENS=${MAX_TOKENS:-65536}
 EFFORT=${EFFORT:-max}
 
 HERE=$(cd "$(dirname "$0")" && pwd)
+# The runner uploads this script to /work and invokes it after cd'ing into the clone,
+# so the script's own directory is not necessarily the repo root.
+if [ ! -d "$HERE/packages" ] && [ -d "$PWD/packages" ]; then
+  HERE=$PWD
+fi
+[ -d "$HERE/packages" ] || { echo "repo root not found (no packages/ under $HERE or $PWD)" >&2; exit 1; }
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 
 log() { printf '\n[install-harness] %s\n' "$*" >&2; }
 
 log "node/npm"
-command -v node >/dev/null || { echo "node missing" >&2; exit 1; }
+# The build image ships no node. dsh 0.2.2 requires node >= 24.9, and a tarball
+# install avoids depending on whichever distro package version the image happens to have.
+# A previous run may have installed node without leaving it on PATH.
+if ! command -v node >/dev/null && [ -d "$HOME/.local/node/bin" ]; then
+  export PATH="$HOME/.local/node/bin:$PATH"
+fi
+if ! command -v node >/dev/null; then
+  NODE_VERSION=${NODE_VERSION:-v24.11.1}
+  arch=$(uname -m); case "$arch" in x86_64) a=x64;; aarch64) a=arm64;; *) echo "unsupported arch $arch" >&2; exit 1;; esac
+  mkdir -p "$HOME/.local"
+  curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$a.tar.gz" \
+    | tar -xz -C "$HOME/.local"
+  ln -sfn "$HOME/.local/node-$NODE_VERSION-linux-$a" "$HOME/.local/node"
+  export PATH="$HOME/.local/node/bin:$PATH"
+fi
+command -v node >/dev/null || { echo "node missing after install" >&2; exit 1; }
 node --version
 npm --version
 
@@ -123,10 +144,7 @@ YAML
   echo "- insert:"
   for pkg in "$HERE"/packages/*/; do
     base=$(basename "$pkg")
-    cat <<YAML
-    - id: harness-${base#dsh-}
-      name: '@deepseek-ai/${base}'
-YAML
+    printf "    - id: harness-%s\n      name: '@deepseek-ai/%s'\n" "${base#dsh-}" "$base"
   done
 } >> "$PROFILE_DIR/cordis.patch.yml"
 
