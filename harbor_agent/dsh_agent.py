@@ -23,7 +23,7 @@ from harbor.models.trial.paths import EnvironmentPaths
 
 # The repository holding the harness layer and the installer.
 HARNESS_REPO = "https://github.com/bluefrog7289/dsh-harness.git"
-HARNESS_COMMIT = "4c5040b29b0ef65323cf23babb060eb84642ed2e"
+HARNESS_COMMIT = "ae2b96db1f9be026823109a3e42e4279d6b0b966"
 
 # dsh 0.2.2 requires node >= 24.9; the tarball avoids depending on the
 # distribution's packaged version, which is older on every supported image.
