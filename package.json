@@ -1,0 +1,9 @@
+{
+  "name": "dsh-harness-fh",
+  "private": true,
+  "version": "1.0.0",
+  "description": "dsh harness layer for the FrontierHarness evaluation",
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}
