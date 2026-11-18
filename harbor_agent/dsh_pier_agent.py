@@ -144,14 +144,13 @@ class DshHarnessAgent(BaseAgent):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         # The profile is baked into the image at build time; a task container only
-        # needs the config root to exist and be writable by the agent user, plus a
-        # trusted copy of the egress CA for the runtime model calls.
+        # needs a trusted copy of the egress CA for the runtime model calls.
         # Pier's exec joins the command into a single shell line, so statements are
         # separated by ';' rather than newlines.
-        parts = [
-            f"mkdir -p {REMOTE_DSH_HOME}",
-            f"chown -R $(id -u):$(id -g) {REMOTE_DSH_HOME}",
-        ]
+        #
+        # No chown here: the agent runs as root, and a recursive chown over the node
+        # installation is a multi-gigabyte walk that parks in uninterruptible IO.
+        parts: list[str] = []
         ca = _egress_ca_b64()
         if ca:
             parts.append(
@@ -159,7 +158,8 @@ class DshHarnessAgent(BaseAgent):
                 f"echo {ca} | base64 -d > /usr/local/share/ca-certificates/runta-egress.crt && "
                 f"(update-ca-certificates >/dev/null 2>&1 || true); fi"
             )
-        await environment.exec(command="; ".join(parts))
+        if parts:
+            await environment.exec(command="; ".join(parts))
 
     async def run(
         self,
