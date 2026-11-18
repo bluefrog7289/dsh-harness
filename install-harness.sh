@@ -90,7 +90,10 @@ log "creating the fh profile"
 # A custom profile is defined by package.json's dsh.profile.bundles. `acp` is a shipped
 # template name that rejects user patches, so the profile is called `fh` and lists the
 # same two bundles the acp template uses.
-PROFILE_DIR="$HOME/.dsh/profiles/fh"
+# dsh resolves the profile under $DSH_HOME when that is set, and under ~/.dsh otherwise;
+# the profile has to be written where dsh will look for it.
+DSH_ROOT=${DSH_HOME:-$HOME/.dsh}
+PROFILE_DIR="$DSH_ROOT/profiles/fh"
 mkdir -p "$PROFILE_DIR/node_modules/@deepseek-ai"
 cat > "$PROFILE_DIR/package.json" <<'JSON'
 {
