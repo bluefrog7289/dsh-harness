@@ -146,18 +146,20 @@ class DshHarnessAgent(BaseAgent):
         # The profile is baked into the image at build time; a task container only
         # needs the config root to exist and be writable by the agent user, plus a
         # trusted copy of the egress CA for the runtime model calls.
-        lines = [
-            f"mkdir -p {REMOTE_DSH_HOME} && chown -R $(id -u):$(id -g) {REMOTE_DSH_HOME}",
-            f"export DSH_HOME={REMOTE_DSH_HOME}",
+        # Pier's exec joins the command into a single shell line, so statements are
+        # separated by ';' rather than newlines.
+        parts = [
+            f"mkdir -p {REMOTE_DSH_HOME}",
+            f"chown -R $(id -u):$(id -g) {REMOTE_DSH_HOME}",
         ]
         ca = _egress_ca_b64()
         if ca:
-            lines.append(
+            parts.append(
                 f"if [ ! -f /usr/local/share/ca-certificates/runta-egress.crt ]; then "
                 f"echo {ca} | base64 -d > /usr/local/share/ca-certificates/runta-egress.crt && "
                 f"(update-ca-certificates >/dev/null 2>&1 || true); fi"
             )
-        await environment.exec(command="\n".join(lines))
+        await environment.exec(command="; ".join(parts))
 
     async def run(
         self,
@@ -173,20 +175,25 @@ class DshHarnessAgent(BaseAgent):
 
         # The key is a stub: Pier's egress proxy replaces it on the way out, so the
         # container never holds the real credential.
-        cmd = (
-            f"export {self._provider_env}={SECRET_STUB}\n"
-            f'export DSH_HOME={REMOTE_DSH_HOME}\n'
-            f'export PATH="{REMOTE_DSH_HOME}/bin:/usr/local/bin:/usr/bin:/bin"\n'
-            # Node's TLS stack does not read the system bundle; the sandbox proxy's
-            # CA has to be named explicitly for the model calls to verify.
-            "if [ -f /usr/local/share/ca-certificates/runta-egress.crt ]; then "
-            "export NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/runta-egress.crt; fi\n"
-            f"mkdir -p /logs/agent\n"
-            f'{REMOTE_DSH_HOME}/bin/dsh --profile fh --json '
-            "--permission-mode danger-full-access --approval-policy never "
-            f"{shlex.quote(instruction)} 2>&1 </dev/null "
-            f"| tee /logs/agent/{events_name} "
-            f"> /logs/agent/{output_name}"
+        # Pier's exec joins the command into one shell line, so the statements are
+        # separated by ';' explicitly; a bare newline is collapsed to a space and
+        # would silently glue two statements into one.
+        cmd = "; ".join(
+            [
+                f"export {self._provider_env}={SECRET_STUB}",
+                f"export DSH_HOME={REMOTE_DSH_HOME}",
+                f'export PATH="{REMOTE_DSH_HOME}/bin:/usr/local/bin:/usr/bin:/bin"',
+                # Node's TLS stack does not read the system bundle; the sandbox proxy's
+                # CA has to be named explicitly for the model calls to verify.
+                "if [ -f /usr/local/share/ca-certificates/runta-egress.crt ]; then "
+                "export NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/runta-egress.crt; fi",
+                "mkdir -p /logs/agent",
+                f"{REMOTE_DSH_HOME}/bin/dsh --profile fh --json "
+                "--permission-mode danger-full-access --approval-policy never "
+                f"{shlex.quote(instruction)} 2>&1 </dev/null "
+                f"| tee /logs/agent/{events_name} "
+                f"> /logs/agent/{output_name}",
+            ]
         )
         await environment.exec(command=cmd, timeout_sec=None)
 
