@@ -121,14 +121,21 @@ for pkg in "$HERE"/packages/*/; do
 done
 
 cat > "$PROFILE_DIR/cordis.patch.yml" <<YAML
-# Harness layer for the FrontierHarness evaluation: disables the two stock plugins the
-# harness replaces, pins the model route, and appends the 14 packages.
+# Harness layer for the FrontierHarness evaluation.
+#
+# tool-result-pruner is the stock 每步裁剪器 and it stays on: the harness relies on it
+# rather than reimplementing it. Its stock threshold (8192 chars) is close to the size of
+# a typical tool result here, so it almost never fired; 2048/1024/512 keeps a readable
+# head and tail while actually reclaiming the middle of large dumps.
+#
+# tool-skill is off because every task in this evaluation is self-contained.
 - id: tool-skill
   disabled: true
-- id: compaction-basic
-  disabled: true
 - id: tool-result-pruner
-  disabled: true
+  config:
+    thresholdChars: 2048
+    headChars: 1024
+    tailChars: 512
 - id: llm-pi-ai
   config:
     providers:
@@ -139,6 +146,25 @@ cat > "$PROFILE_DIR/cordis.patch.yml" <<YAML
         baseURL: ${PROVIDER_BASE}
         headers:
           User-Agent: "${PROVIDER_UA}"
+        # The route default effort. reasoningEfforts on the model only declares which
+        # levels exist; it does not select one. dsh drops a per-agent reasoningEffort
+        # whenever the model declares reasoningEfforts (adapterDefaults), so the route
+        # field is the one that actually reaches the wire.
+        reasoning: ${EFFORT}
+        # Without a policy dsh does not retry at all (llm-retry returns early when no
+        # provider carries one), so a single upstream hiccup loses the whole turn.
+        retryPolicy:
+          mode: normal
+          maxRetries: 3
+          retryableCodes:
+            - EMPTY_RESPONSE
+            - RATE_LIMIT
+            - SERVER
+            - TIMEOUT
+            - TRANSPORT
+          backoff:
+            initialDelayMs: 2000
+            maxDelayMs: 30000
         models:
           - id: ${MODEL_ID}
             name: ${MODEL_ID}
