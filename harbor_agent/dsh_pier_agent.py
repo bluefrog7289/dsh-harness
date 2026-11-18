@@ -98,17 +98,19 @@ class DshHarnessAgent(BaseAgent):
             [
                 "set -euo pipefail",
                 "export DEBIAN_FRONTEND=noninteractive",
-                # The sandbox's egress proxy MITMs TLS. Trust its CA first, or every
-                # https call during the build dies on certificate verification.
+                # Task images are deliberately minimal: the regex-log image ships no
+                # python, curl, git or node. apt is available at build time and works
+                # over plain http, so it is the one thing that can be relied on.
+                "apt-get update -qq",
+                "apt-get install -y -qq --no-install-recommends"
+                " ca-certificates curl git xz-utils",
+                # The sandbox's egress proxy MITMs TLS. Trust its CA before the first
+                # https call or the whole build dies on certificate verification.
+                "mkdir -p /usr/local/share/ca-certificates",
                 'if [ -n "${EGRESS_CA_B64:-}" ]; then',
                 '  echo "$EGRESS_CA_B64" | base64 -d > /usr/local/share/ca-certificates/runta-egress.crt',
                 "  update-ca-certificates >/dev/null 2>&1 || true",
                 "fi",
-                # Task images are deliberately minimal: the regex-log image ships no
-                # python, curl, git or node. apt is available at build time.
-                "apt-get update -qq",
-                "apt-get install -y -qq --no-install-recommends"
-                " ca-certificates curl git xz-utils",
                 f"mkdir -p {REMOTE_DSH_HOME}",
                 'arch=$(uname -m)',
                 'case "$arch" in x86_64) a=x64;; aarch64) a=arm64;; *) echo "unsupported arch $arch" >&2; exit 1;; esac',
