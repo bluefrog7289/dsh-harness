@@ -46,10 +46,21 @@ fi
 if ! command -v node >/dev/null; then
   NODE_VERSION=${NODE_VERSION:-v24.11.1}
   arch=$(uname -m); case "$arch" in x86_64) a=x64;; aarch64) a=arm64;; *) echo "unsupported arch $arch" >&2; exit 1;; esac
+  # Task images ship neither curl nor a new enough tar, so the download and the
+  # unpack both go through python, which every image has.
   mkdir -p "$HOME/.local"
-  curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$a.tar.gz" \
-    | tar -xz -C "$HOME/.local"
-  ln -sfn "$HOME/.local/node-$NODE_VERSION-linux-$a" "$HOME/.local/node"
+  NODE_TARBALL="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-$a.tar.gz" \
+  NODE_DEST="$HOME/.local/node" python3 - <<'PY'
+import io, os, shutil, tarfile, urllib.request
+url = os.environ["NODE_TARBALL"]
+dest = os.environ["NODE_DEST"]
+data = urllib.request.urlopen(url, timeout=300).read()
+with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+    tf.extractall("/tmp/node-extract", filter="data")
+top = os.path.join("/tmp/node-extract", os.listdir("/tmp/node-extract")[0])
+shutil.move(top, dest)
+shutil.rmtree("/tmp/node-extract", ignore_errors=True)
+PY
   export PATH="$HOME/.local/node/bin:$PATH"
 fi
 command -v node >/dev/null || { echo "node missing after install" >&2; exit 1; }

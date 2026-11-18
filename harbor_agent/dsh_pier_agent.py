@@ -81,13 +81,26 @@ class DshHarnessAgent(BaseAgent):
         run = "\n".join(
             [
                 "set -euo pipefail",
-                # node: the tarball pins the version, since dsh needs >= 24.9 and no
-                # supported image ships one that new.
+                # Task images are minimal: curl, git and tar are all optional, so
+                # the pieces the install needs are fetched and unpacked in python,
+                # which every terminal-bench image ships.
                 f"mkdir -p {REMOTE_DSH_HOME}",
                 'arch=$(uname -m)',
                 'case "$arch" in x86_64) a=x64;; aarch64) a=arm64;; *) echo "unsupported arch $arch" >&2; exit 1;; esac',
-                f'curl -fsSL "https://nodejs.org/dist/{NODE_VERSION}/node-{NODE_VERSION}-linux-$a.tar.gz"'
-                f' | tar -xz -C {REMOTE_DSH_HOME} --strip-components=1',
+                f"ARCH=$arch python3 - <<'PY'",
+                "import io, os, shutil, sys, tarfile, urllib.request",
+                "arch = os.environ['ARCH']",
+                f"url = 'https://nodejs.org/dist/{NODE_VERSION}/node-{NODE_VERSION}-linux-%s.tar.gz' % arch",
+                "print('fetching', url, file=sys.stderr)",
+                "data = urllib.request.urlopen(url, timeout=180).read()",
+                "with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:",
+                "    tf.extractall('/tmp/node-extract', filter='data')",
+                # The tarball unpacks as one top-level directory; flatten it into place.
+                "top = os.path.join('/tmp/node-extract', os.listdir('/tmp/node-extract')[0])",
+                f"for name in os.listdir(top):",
+                f"    shutil.move(os.path.join(top, name), os.path.join({REMOTE_DSH_HOME!r}, name))",
+                "shutil.rmtree('/tmp/node-extract', ignore_errors=True)",
+                "PY",
                 f'export PATH="{REMOTE_DSH_HOME}/bin:$PATH"',
                 # The harness layer comes from the pinned commit, not a branch.
                 f'git clone -q {HARNESS_REPO} /opt/harness',
