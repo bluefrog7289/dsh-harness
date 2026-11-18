@@ -87,9 +87,9 @@ for dep in dsh-llm dsh-tools dsh-compaction dsh-compaction-basic \
 done
 
 log "creating the fh profile"
-# A custom profile is defined by package.json's dsh.profile.bundles. `acp` is a shipped
-# template name that rejects user patches, so the profile is called `fh` and lists the
-# same two bundles the acp template uses.
+# A custom profile is defined by package.json's dsh.profile.bundles. The evaluation
+# drives dsh one task at a time and reads its event stream, which is the `headless`
+# app, so the profile lists the headless bundles rather than the acp ones.
 # dsh resolves the profile under $DSH_HOME when that is set, and under ~/.dsh otherwise;
 # the profile has to be written where dsh will look for it.
 DSH_ROOT=${DSH_HOME:-$HOME/.dsh}
@@ -102,7 +102,7 @@ cat > "$PROFILE_DIR/package.json" <<'JSON'
   "dependencies": {},
   "dsh": {
     "profile": {
-      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-acp-app"]
+      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"]
     }
   }
 }
@@ -141,10 +141,6 @@ cat > "$PROFILE_DIR/cordis.patch.yml" <<YAML
             reasoningEfforts:
               ${EFFORT}: ${EFFORT}
 - id: agent-default-model
-  config:
-    provider: harness
-    model: ${MODEL_ID}
-- id: acp
   config:
     provider: harness
     model: ${MODEL_ID}
