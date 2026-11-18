@@ -58,6 +58,13 @@ command -v node >/dev/null || { echo "node missing after install" >&2; exit 1; }
 node --version
 npm --version
 
+# Node ships its own CA store and ignores the system bundle, so a sandbox that
+# terminates TLS has to be named explicitly. Harmless when the file is absent
+# (no proxy in the path).
+if [ -z "${NODE_EXTRA_CA_CERTS:-}" ] && [ -f /usr/local/share/ca-certificates/runta-egress.crt ]; then
+  export NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/runta-egress.crt
+fi
+
 log "installing dsh@$DSH_VERSION"
 npm install -g --ignore-scripts "@deepseek-ai/dsh@$DSH_VERSION"
 DSH_ROOT=$(npm root -g)/@deepseek-ai/dsh

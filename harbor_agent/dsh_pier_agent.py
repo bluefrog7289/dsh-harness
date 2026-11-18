@@ -177,6 +177,10 @@ class DshHarnessAgent(BaseAgent):
             f"export {self._provider_env}={SECRET_STUB}\n"
             f'export DSH_HOME={REMOTE_DSH_HOME}\n'
             f'export PATH="{REMOTE_DSH_HOME}/bin:/usr/local/bin:/usr/bin:/bin"\n'
+            # Node's TLS stack does not read the system bundle; the sandbox proxy's
+            # CA has to be named explicitly for the model calls to verify.
+            "if [ -f /usr/local/share/ca-certificates/runta-egress.crt ]; then "
+            "export NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/runta-egress.crt; fi\n"
             f"mkdir -p /logs/agent\n"
             f'{REMOTE_DSH_HOME}/bin/dsh --profile fh --json '
             "--permission-mode danger-full-access --approval-policy never "
