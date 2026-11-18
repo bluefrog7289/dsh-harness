@@ -14,6 +14,7 @@ golden checkpoint, and the trial lock describing the same code.
 
 from __future__ import annotations
 
+import base64
 import json
 import shlex
 
@@ -31,6 +32,21 @@ NODE_VERSION = "v24.11.1"
 # One container per task, so a single config root is enough.
 REMOTE_DSH_HOME = "/opt/dsh-home"
 SECRET_STUB = "runta-secret-stub"
+
+# The sandbox's egress proxy terminates TLS with its own CA. Build-time network
+# calls leave through that proxy, so the CA has to exist inside the image before
+# the first https request. The file lives on the machine pier runs on, which is
+# the same machine whose proxy the build containers use.
+EGRESS_CA_PATH = "/usr/local/share/ca-certificates/runta-egress.crt"
+
+
+def _egress_ca_b64() -> str | None:
+    try:
+        with open(EGRESS_CA_PATH, "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        return None
+    return base64.b64encode(raw).decode() if raw else None
 
 
 class DshHarnessAgent(BaseAgent):
@@ -81,10 +97,15 @@ class DshHarnessAgent(BaseAgent):
         run = "\n".join(
             [
                 "set -euo pipefail",
-                # Task images are deliberately minimal: the regex-log image ships no
-                # python, curl, git or node. apt is available and the build stage has
-                # network, so the toolchain is installed rather than assumed.
                 "export DEBIAN_FRONTEND=noninteractive",
+                # The sandbox's egress proxy MITMs TLS. Trust its CA first, or every
+                # https call during the build dies on certificate verification.
+                'if [ -n "${EGRESS_CA_B64:-}" ]; then',
+                '  echo "$EGRESS_CA_B64" | base64 -d > /usr/local/share/ca-certificates/runta-egress.crt',
+                "  update-ca-certificates >/dev/null 2>&1 || true",
+                "fi",
+                # Task images are deliberately minimal: the regex-log image ships no
+                # python, curl, git or node. apt is available at build time.
                 "apt-get update -qq",
                 "apt-get install -y -qq --no-install-recommends"
                 " ca-certificates curl git xz-utils",
@@ -101,6 +122,9 @@ class DshHarnessAgent(BaseAgent):
                 'HOME=' + REMOTE_DSH_HOME + ' bash install-harness.sh',
             ]
         )
+        ca = _egress_ca_b64()
+        if ca:
+            env["EGRESS_CA_B64"] = ca
         return AgentInstallSpec(
             agent_name=self.name(),
             version=DSH_VERSION,
@@ -118,13 +142,20 @@ class DshHarnessAgent(BaseAgent):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         # The profile is baked into the image at build time; a task container only
-        # needs the config root to exist and be writable by the agent user.
-        await environment.exec(
-            command=(
-                f"mkdir -p {REMOTE_DSH_HOME} && "
-                f"chown -R $(id -u):$(id -g) {REMOTE_DSH_HOME}"
-            ),
-        )
+        # needs the config root to exist and be writable by the agent user, plus a
+        # trusted copy of the egress CA for the runtime model calls.
+        lines = [
+            f"mkdir -p {REMOTE_DSH_HOME} && chown -R $(id -u):$(id -g) {REMOTE_DSH_HOME}",
+            f"export DSH_HOME={REMOTE_DSH_HOME}",
+        ]
+        ca = _egress_ca_b64()
+        if ca:
+            lines.append(
+                f"if [ ! -f /usr/local/share/ca-certificates/runta-egress.crt ]; then "
+                f"echo {ca} | base64 -d > /usr/local/share/ca-certificates/runta-egress.crt && "
+                f"(update-ca-certificates >/dev/null 2>&1 || true); fi"
+            )
+        await environment.exec(command="\n".join(lines))
 
     async def run(
         self,
