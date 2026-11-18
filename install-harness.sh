@@ -123,19 +123,20 @@ done
 cat > "$PROFILE_DIR/cordis.patch.yml" <<YAML
 # Harness layer for the FrontierHarness evaluation.
 #
-# tool-result-pruner is the stock 每步裁剪器 and it stays on: the harness relies on it
-# rather than reimplementing it. Its stock threshold (8192 chars) is close to the size of
-# a typical tool result here, so it almost never fired; 2048/1024/512 keeps a readable
-# head and tail while actually reclaiming the middle of large dumps.
+# compaction-basic and tool-result-pruner stay off. harness-compaction-guarded
+# does not sit beside them: it subclasses BasicCompactionEngine and constructs
+# its own pruner, so it registers the `compaction` and `toolResultPruner`
+# services itself. Leaving either stock plugin enabled makes both register the
+# same service and the guarded package fails to activate. The harness's pruner
+# budgets therefore live in that package, not in the stock plugin's config.
 #
 # tool-skill is off because every task in this evaluation is self-contained.
 - id: tool-skill
   disabled: true
+- id: compaction-basic
+  disabled: true
 - id: tool-result-pruner
-  config:
-    thresholdChars: 2048
-    headChars: 1024
-    tailChars: 512
+  disabled: true
 - id: llm-pi-ai
   config:
     providers:
@@ -188,6 +189,17 @@ YAML
   done
 } >> "$PROFILE_DIR/cordis.patch.yml"
 
+# harness-compaction-guarded derives its pruner budget from the context window
+# when thresholdChars is absent: floor(200000 * 2.8) = 560000 characters, which
+# no tool result in this evaluation reaches, so the pruner would never fire.
+# Pinning the threshold makes the head/middle/tail pass real; head and tail
+# default to half and an eighth of it, which keeps the stock ratio between them.
+cat >> "$PROFILE_DIR/cordis.patch.yml" <<YAML
+- id: harness-compaction-guarded
+  config:
+    thresholdChars: 2400
+YAML
+
 log "verifying the composed profile"
 dsh --profile fh --dump-config > /tmp/composed.yml
 grep -q "id: harness-conduct" /tmp/composed.yml \
@@ -202,7 +214,7 @@ log "smoke: boot the profile, all 14 packages active"
 timeout 180 dsh --profile fh --help >/tmp/smoke.out 2>/tmp/smoke.err || true
 grep -q -- '--permission-mode' /tmp/smoke.out \
   || { echo "the fh profile did not boot the headless app:" >&2; tail -20 /tmp/smoke.out /tmp/smoke.err >&2; exit 1; }
-if grep -q 'entries did not activate' /tmp/smoke.err; then
+if grep -qE 'entries? did not activate' /tmp/smoke.err; then
   echo "some harness packages failed to activate:" >&2
   grep -E '^(harness-|[a-z-]+ \(@)' /tmp/smoke.err >&2
   exit 1
