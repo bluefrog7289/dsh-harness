@@ -25,7 +25,7 @@ from pier.models.agent.install import AgentInstallSpec, InstallStep
 from pier.models.agent.network import NetworkAllowlist
 
 HARNESS_REPO = "https://github.com/bluefrog7289/dsh-harness.git"
-HARNESS_COMMIT = "ce03bc00ee01f00da4b15c7961acbea2a42579c2"
+HARNESS_COMMIT = "959e6c559a9c29fa1b211f29f62c040f76299e9d"
 DSH_VERSION = "0.2.2-rc.1"
 NODE_VERSION = "v24.11.1"
 
