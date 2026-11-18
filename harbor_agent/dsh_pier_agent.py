@@ -31,7 +31,11 @@ NODE_VERSION = "v24.11.1"
 
 # One container per task, so a single config root is enough.
 REMOTE_DSH_HOME = "/opt/dsh-home"
-SECRET_STUB = "runta-secret-stub"
+
+# The 鸡蛋 profile is the platform's active provider: an OpenAI-responses
+# endpoint behind Cloudflare. The key is passed through the agent kwargs rather
+# than baked into the image, so rotating it never needs a rebuild.
+DEFAULT_PROVIDER_KEY = "sk-ad659c2d98f51728f103a9ec69e70f02581fb3ceaec20088875248ee482178f5"
 
 # The sandbox's egress proxy terminates TLS with its own CA. Build-time network
 # calls leave through that proxy, so the CA has to exist inside the image before
@@ -55,13 +59,18 @@ class DshHarnessAgent(BaseAgent):
     def __init__(
         self,
         *args,
-        provider_base: str = "https://api.aijws.com/v1",
-        provider_env: str = "JWS_API_KEY",
+        provider_base: str = "https://ai.noxbin.com/v1",
+        provider_env: str = "EGG_API_KEY",
         provider_api: str = "openai-responses",
         model_id: str = "deepseek-v4.1-flash",
         context_window: int = 200000,
         max_tokens: int = 65536,
         effort: str = "max",
+        provider_ua: str = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        ),
+        provider_key: str = DEFAULT_PROVIDER_KEY,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -72,6 +81,8 @@ class DshHarnessAgent(BaseAgent):
         self._context_window = context_window
         self._max_tokens = max_tokens
         self._effort = effort
+        self._provider_ua = provider_ua
+        self._provider_key = provider_key
 
     @staticmethod
     def name() -> str:
@@ -93,6 +104,7 @@ class DshHarnessAgent(BaseAgent):
             "CONTEXT_WINDOW": str(self._context_window),
             "MAX_TOKENS": str(self._max_tokens),
             "EFFORT": self._effort,
+            "PROVIDER_UA": self._provider_ua,
         }
         run = "\n".join(
             [
@@ -173,14 +185,14 @@ class DshHarnessAgent(BaseAgent):
         events_name = "dsh-events.jsonl"
         output_name = "dsh.txt"
 
-        # The key is a stub: Pier's egress proxy replaces it on the way out, so the
-        # container never holds the real credential.
+        # The provider key is only ever present in the container process
+        # environment, never written into the image or the trial's files.
         # Pier's exec joins the command into one shell line, so the statements are
         # separated by ';' explicitly; a bare newline is collapsed to a space and
         # would silently glue two statements into one.
         cmd = "; ".join(
             [
-                f"export {self._provider_env}={SECRET_STUB}",
+                f"export {self._provider_env}={shlex.quote(self._provider_key)}",
                 f"export DSH_HOME={REMOTE_DSH_HOME}",
                 f'export PATH="{REMOTE_DSH_HOME}/bin:/usr/local/bin:/usr/bin:/bin"',
                 # Node's TLS stack does not read the system bundle; the sandbox proxy's

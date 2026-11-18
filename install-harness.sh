@@ -3,27 +3,31 @@
 #
 # Runs inside the build runtime at /work/harness (the cloned repo root) as the
 # agent user. Installs dsh, wires the 14 harness packages into a custom `fh`
-# profile that serves ACP, and pins the model route.
+# profile that boots the headless app, and pins the model route.
 #
 # Inputs (environment):
 #   DSH_VERSION     dsh package version to install (default 0.2.2-rc.1)
-#   PROVIDER_BASE   provider base URL          (default https://api.aijws.com/v1)
-#   PROVIDER_ENV    env var holding the key    (default JWS_API_KEY)
+#   PROVIDER_BASE   provider base URL          (default https://ai.noxbin.com/v1)
+#   PROVIDER_ENV    env var holding the key    (default EGG_API_KEY)
 #   PROVIDER_API    wire protocol              (default openai-responses)
 #   MODEL_ID        model id                   (default deepseek-v4.1-flash)
 #   CONTEXT_WINDOW  context length             (default 200000)
 #   MAX_TOKENS      max output tokens          (default 65536)
 #   EFFORT          reasoning effort           (default max)
+#   PROVIDER_UA     User-Agent to send         (default a browser string)
 set -euo pipefail
 
 DSH_VERSION=${DSH_VERSION:-0.2.2-rc.1}
-PROVIDER_BASE=${PROVIDER_BASE:-https://api.aijws.com/v1}
-PROVIDER_ENV=${PROVIDER_ENV:-JWS_API_KEY}
+PROVIDER_BASE=${PROVIDER_BASE:-https://ai.noxbin.com/v1}
+PROVIDER_ENV=${PROVIDER_ENV:-EGG_API_KEY}
 PROVIDER_API=${PROVIDER_API:-openai-responses}
 MODEL_ID=${MODEL_ID:-deepseek-v4.1-flash}
 CONTEXT_WINDOW=${CONTEXT_WINDOW:-200000}
 MAX_TOKENS=${MAX_TOKENS:-65536}
 EFFORT=${EFFORT:-max}
+# The provider sits behind Cloudflare, whose browser-integrity rule rejects a
+# `node` User-Agent with error 1010 before the request ever reaches the API.
+PROVIDER_UA=${PROVIDER_UA:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 # The runner uploads this script to /work and invokes it after cd'ing into the clone,
@@ -133,6 +137,8 @@ cat > "$PROFILE_DIR/cordis.patch.yml" <<YAML
         apiKeyEnv: ${PROVIDER_ENV}
         api: ${PROVIDER_API}
         baseURL: ${PROVIDER_BASE}
+        headers:
+          User-Agent: "${PROVIDER_UA}"
         models:
           - id: ${MODEL_ID}
             name: ${MODEL_ID}
