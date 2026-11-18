@@ -164,17 +164,17 @@ grep -q "provider: harness" /tmp/composed.yml \
   || { echo "model route did not compose into the profile" >&2; exit 1; }
 printf '  composed %s rows\n' "$(grep -c '^- id:' /tmp/composed.yml)" >&2
 
-log "smoke: ACP handshake, all 14 packages active"
-handshake=$(printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}' \
-  | timeout 180 dsh --profile fh 2>/tmp/handshake.err | head -1)
-printf '%s' "$handshake" | grep -q '"agentInfo"' \
-  || { echo "ACP handshake failed" >&2; cat /tmp/handshake.err >&2; exit 1; }
-if grep -q 'entries did not activate' /tmp/handshake.err; then
+log "smoke: boot the profile, all 14 packages active"
+# Booting the app's plugin tree is what proves the composition; --help reaches the
+# headless app's own parser and exits, so no provider key is needed at build time.
+timeout 180 dsh --profile fh --help >/tmp/smoke.out 2>/tmp/smoke.err || true
+grep -q -- '--permission-mode' /tmp/smoke.out \
+  || { echo "the fh profile did not boot the headless app:" >&2; tail -20 /tmp/smoke.out /tmp/smoke.err >&2; exit 1; }
+if grep -q 'entries did not activate' /tmp/smoke.err; then
   echo "some harness packages failed to activate:" >&2
-  grep -E '^(harness-|[a-z-]+ \(@)' /tmp/handshake.err >&2
+  grep -E '^(harness-|[a-z-]+ \(@)' /tmp/smoke.err >&2
   exit 1
 fi
-printf '  ok, none skipped\n' >&2
+printf '  ok, headless app booted\n' >&2
 
 log "done"
