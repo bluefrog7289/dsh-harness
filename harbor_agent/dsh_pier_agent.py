@@ -35,7 +35,7 @@ REMOTE_DSH_HOME = "/opt/dsh-home"
 # The 鸡蛋 profile is the platform's active provider: an OpenAI-responses
 # endpoint behind Cloudflare. The key is passed through the agent kwargs rather
 # than baked into the image, so rotating it never needs a rebuild.
-DEFAULT_PROVIDER_KEY = "sk-ad659c2d98f51728f103a9ec69e70f02581fb3ceaec20088875248ee482178f5"
+DEFAULT_PROVIDER_KEY = "sk-0592c8050fa7e1d8edac6688e38b28d40e3a5800bf2b379c7fa835e1e0c81205"
 
 # The sandbox's egress proxy terminates TLS with its own CA. Build-time network
 # calls leave through that proxy, so the CA has to exist inside the image before
@@ -62,7 +62,7 @@ class DshHarnessAgent(BaseAgent):
         provider_base: str = "https://ai.noxbin.com/v1",
         provider_env: str = "EGG_API_KEY",
         provider_api: str = "openai-responses",
-        model_id: str = "deepseek-v4.1-flash",
+        model_id: str = "deepseek-v4-1-flash-1017",
         context_window: int = 200000,
         max_tokens: int = 65536,
         effort: str = "max",

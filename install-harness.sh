@@ -10,7 +10,7 @@
 #   PROVIDER_BASE   provider base URL          (default https://ai.noxbin.com/v1)
 #   PROVIDER_ENV    env var holding the key    (default EGG_API_KEY)
 #   PROVIDER_API    wire protocol              (default openai-responses)
-#   MODEL_ID        model id                   (default deepseek-v4.1-flash)
+#   MODEL_ID        model id                   (default deepseek-v4-1-flash-1017)
 #   CONTEXT_WINDOW  context length             (default 200000)
 #   MAX_TOKENS      max output tokens          (default 65536)
 #   EFFORT          reasoning effort           (default max)
@@ -21,7 +21,7 @@ DSH_VERSION=${DSH_VERSION:-0.2.2-rc.1}
 PROVIDER_BASE=${PROVIDER_BASE:-https://ai.noxbin.com/v1}
 PROVIDER_ENV=${PROVIDER_ENV:-EGG_API_KEY}
 PROVIDER_API=${PROVIDER_API:-openai-responses}
-MODEL_ID=${MODEL_ID:-deepseek-v4.1-flash}
+MODEL_ID=${MODEL_ID:-deepseek-v4-1-flash-1017}
 CONTEXT_WINDOW=${CONTEXT_WINDOW:-200000}
 MAX_TOKENS=${MAX_TOKENS:-65536}
 EFFORT=${EFFORT:-max}
